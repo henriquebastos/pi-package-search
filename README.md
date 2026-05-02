@@ -25,7 +25,7 @@
 `pi-package-search` adds package discovery to Pi with two tools and a matching skill:
 
 - `search_pi_packages` searches npm for packages tagged with `pi-package`
-- `install_pi_package` installs the package the user chooses
+- `install_pi_package` installs the package the user chooses and queues a Pi reload follow-up after success
 - `/skill:pi-package-search` guides Pi to use the right workflow
 
 It uses the same npm registry search endpoint behind the Pi package gallery, then formats results as ready-to-run `pi install` commands.
@@ -40,13 +40,14 @@ This package helps Pi:
 - stay focused on packages intended for Pi
 - return short descriptions with copy-pasteable install commands
 - install a selected package in global or project scope
+- activate newly installed packages by queueing Pi's reload flow after install
 
 ## What's included
 
 | Component | Name | Purpose |
 | --- | --- | --- |
 | Tool | `search_pi_packages` | Search npm for packages tagged with `pi-package` |
-| Tool | `install_pi_package` | Run `pi install` for a chosen package |
+| Tool | `install_pi_package` | Run `pi install` for a chosen package and queue reload |
 | Skill | `/skill:pi-package-search` | Prompt Pi to use the package discovery workflow |
 
 ## Install
@@ -94,6 +95,8 @@ If the user already knows what they want, `install_pi_package` can install it di
 - global scope: `pi install npm:@scope/package-name`
 - project scope: `pi install -l npm:@scope/package-name`
 - it also tolerates the user or model passing the full command back in, like `pi install npm:@scope/package-name`
+- successful installs queue Pi's reload flow as a follow-up so the package becomes available after the current turn
+- set `reloadAfterInstall: false` only when intentionally batching installs; then run `/reload` manually
 
 ## How it works
 
@@ -112,6 +115,8 @@ Each result is normalized into:
 - a bare package name like `@scope/pkg`
 - a full npm source like `npm:@scope/pkg@1.2.3`
 - a full command like `pi install npm:@scope/pkg` or `pi install -l @scope/pkg`
+
+After a successful install, the extension queues its internal reload command with Pi's follow-up delivery. If reload queueing is unavailable or disabled with `reloadAfterInstall: false`, the tool result tells the user to run `/reload` manually.
 
 ## Development
 

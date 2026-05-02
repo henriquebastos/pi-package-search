@@ -12,10 +12,12 @@ export interface InstallPiPackageDetails {
   stdout: string;
   stderr: string;
   code: number;
+  reloadQueued: boolean;
 }
 
 export interface InstallPiPackageOptions {
   execImpl?: ExecLike;
+  queueReloadFollowUp?: () => void;
 }
 
 type ExecLike = (
@@ -67,6 +69,12 @@ export function createInstallPiPackageTool(
             "Install into project settings with pi install -l instead of global settings.",
         }),
       ),
+      reloadAfterInstall: Type.Optional(
+        Type.Boolean({
+          description:
+            "Queue Pi reload after a successful install. Defaults to true.",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal) {
       const execImpl = options.execImpl;
@@ -90,12 +98,31 @@ export function createInstallPiPackageTool(
         throw new Error(`pi install failed: ${getFailureReason(result)}`);
       }
 
+      const shouldQueueReload = params.reloadAfterInstall !== false;
+      let reloadQueued = false;
+
+      if (shouldQueueReload && options.queueReloadFollowUp) {
+        try {
+          options.queueReloadFollowUp();
+          reloadQueued = true;
+        } catch {
+          reloadQueued = false;
+        }
+      }
+
       const scopeLabel = params.project ? "project" : "global";
       let text = `Installed ${source} (${scopeLabel} scope).\nCommand: ${command}`;
       const stdout = result.stdout.trim();
 
       if (stdout) {
         text += `\n\n${stdout}`;
+      }
+
+      if (reloadQueued) {
+        text +=
+          "\n\nQueued Pi reload as a follow-up so the package becomes available after this turn.";
+      } else {
+        text += "\n\nRun /reload to activate it.";
       }
 
       return {
@@ -107,6 +134,7 @@ export function createInstallPiPackageTool(
           stdout: result.stdout,
           stderr: result.stderr,
           code: result.code,
+          reloadQueued,
         } satisfies InstallPiPackageDetails,
       };
     },

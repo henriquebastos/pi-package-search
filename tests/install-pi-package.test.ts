@@ -100,6 +100,106 @@ describe("createInstallPiPackageTool", () => {
     );
   });
 
+  it("queues reload after a successful install by default", async () => {
+    const execMock = vi.fn().mockResolvedValue({
+      stdout: "installed",
+      stderr: "",
+      code: 0,
+      killed: false,
+    });
+    const queueReloadFollowUp = vi.fn();
+    const tool = createInstallPiPackageTool({
+      execImpl: execMock,
+      queueReloadFollowUp,
+    });
+
+    const result = await tool.execute(
+      "tool-call-1",
+      { packageName: "@acme/pi-toolkit" },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const firstContent = result.content[0];
+
+    expect(queueReloadFollowUp).toHaveBeenCalledOnce();
+    expect(result.details).toMatchObject({ reloadQueued: true });
+    expect(firstContent?.type).toBe("text");
+
+    if (!firstContent || firstContent.type !== "text") {
+      throw new Error("Expected text content");
+    }
+
+    expect(firstContent.text).toContain("Queued Pi reload");
+  });
+
+  it("skips reload queueing when reloadAfterInstall is false", async () => {
+    const execMock = vi.fn().mockResolvedValue({
+      stdout: "installed",
+      stderr: "",
+      code: 0,
+      killed: false,
+    });
+    const queueReloadFollowUp = vi.fn();
+    const tool = createInstallPiPackageTool({
+      execImpl: execMock,
+      queueReloadFollowUp,
+    });
+
+    const result = await tool.execute(
+      "tool-call-1",
+      { packageName: "@acme/pi-toolkit", reloadAfterInstall: false },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const firstContent = result.content[0];
+
+    expect(queueReloadFollowUp).not.toHaveBeenCalled();
+    expect(result.details).toMatchObject({ reloadQueued: false });
+    expect(firstContent?.type).toBe("text");
+
+    if (!firstContent || firstContent.type !== "text") {
+      throw new Error("Expected text content");
+    }
+
+    expect(firstContent.text).toContain("Run /reload to activate it.");
+  });
+
+  it("keeps install success when reload queueing fails", async () => {
+    const execMock = vi.fn().mockResolvedValue({
+      stdout: "installed",
+      stderr: "",
+      code: 0,
+      killed: false,
+    });
+    const tool = createInstallPiPackageTool({
+      execImpl: execMock,
+      queueReloadFollowUp() {
+        throw new Error("queue unavailable");
+      },
+    });
+
+    const result = await tool.execute(
+      "tool-call-1",
+      { packageName: "@acme/pi-toolkit" },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const firstContent = result.content[0];
+
+    expect(result.details).toMatchObject({ reloadQueued: false });
+    expect(firstContent?.type).toBe("text");
+
+    if (!firstContent || firstContent.type !== "text") {
+      throw new Error("Expected text content");
+    }
+
+    expect(firstContent.text).toContain("Installed npm:@acme/pi-toolkit");
+    expect(firstContent.text).toContain("Run /reload to activate it.");
+  });
+
   it("throws when pi install fails", async () => {
     const execMock = vi.fn().mockResolvedValue({
       stdout: "",
@@ -107,7 +207,11 @@ describe("createInstallPiPackageTool", () => {
       code: 1,
       killed: false,
     });
-    const tool = createInstallPiPackageTool({ execImpl: execMock });
+    const queueReloadFollowUp = vi.fn();
+    const tool = createInstallPiPackageTool({
+      execImpl: execMock,
+      queueReloadFollowUp,
+    });
 
     await expect(
       tool.execute(
@@ -118,5 +222,6 @@ describe("createInstallPiPackageTool", () => {
         {} as never,
       ),
     ).rejects.toThrow("pi install failed: boom");
+    expect(queueReloadFollowUp).not.toHaveBeenCalled();
   });
 });

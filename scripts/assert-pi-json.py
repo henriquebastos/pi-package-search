@@ -17,23 +17,43 @@ if len(sys.argv) < 3:
 jsonl_path = Path(sys.argv[1])
 tool_name = sys.argv[2]
 expected_args: dict[str, object] = {}
+expected_details: dict[str, object] = {}
+expected_queue: dict[str, list[object]] = {"followUp": [], "steering": []}
+
+
+def parse_expected_value(value: str) -> object:
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+    return value
+
 
 for raw in sys.argv[3:]:
     if "=" not in raw:
         fail(f"invalid expected arg {raw!r}; expected key=value")
     key, value = raw.split("=", 1)
-    if value.lower() == "true":
-        expected_args[key] = True
-    elif value.lower() == "false":
-        expected_args[key] = False
+    expected_value = parse_expected_value(value)
+    if key.startswith("details."):
+        expected_details[key.removeprefix("details.")] = expected_value
+    elif key == "queue.followUp":
+        expected_queue["followUp"].append(expected_value)
+    elif key == "queue.steering":
+        expected_queue["steering"].append(expected_value)
     else:
-        expected_args[key] = value
+        expected_args[key] = expected_value
 
 if not jsonl_path.exists():
     fail(f"file does not exist: {jsonl_path}")
 
 lines = [line for line in jsonl_path.read_text().splitlines() if line.strip()]
 events = [json.loads(line) for line in lines]
+
+queue_updates = [event for event in events if event.get("type") == "queue_update"]
+for queue_name, expected_values in expected_queue.items():
+    for expected_value in expected_values:
+        if not any(expected_value in event.get(queue_name, []) for event in queue_updates):
+            fail(f"did not observe queue_update {queue_name} containing {expected_value!r}")
 
 starts = [
     event
@@ -62,6 +82,24 @@ if not ends:
 
 if any(event.get("isError") for event in ends):
     fail(f"observed failing {tool_name} execution")
+
+
+def get_path(value: object, path: str) -> object:
+    current = value
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+first_result_details = ends[0].get("result", {}).get("details", {})
+for key, expected_value in expected_details.items():
+    actual_value = get_path(first_result_details, key)
+    if actual_value != expected_value:
+        fail(
+            f"expected first {tool_name} result detail {key}={expected_value!r}, got {actual_value!r}",
+        )
 
 assistant_messages = []
 for event in events:

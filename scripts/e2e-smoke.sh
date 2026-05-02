@@ -101,7 +101,9 @@ python3 "${SCRIPT_DIR}/assert-pi-json.py" \
   "${WORK_ROOT}/install.jsonl" \
   install_pi_package \
   "packageName=${TEST_INSTALL_PACKAGE}" \
-  "project=true"
+  "project=true" \
+  "details.reloadQueued=true" \
+  "queue.followUp=/pi-package-search-reload"
 
 python3 - "${PROJECT_DIR}/.pi/settings.json" "${TEST_INSTALL_PACKAGE}" <<'PY'
 import json
