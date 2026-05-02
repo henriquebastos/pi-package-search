@@ -25,7 +25,10 @@ describe("extension", () => {
       name: string;
       handler: (
         args: string,
-        ctx: { reload: () => Promise<void> },
+        ctx: {
+          waitForIdle: () => Promise<void>;
+          reload: () => Promise<void>;
+        },
       ) => Promise<void>;
     }> = [];
 
@@ -36,7 +39,10 @@ describe("extension", () => {
         options: {
           handler: (
             args: string,
-            ctx: { reload: () => Promise<void> },
+            ctx: {
+              waitForIdle: () => Promise<void>;
+              reload: () => Promise<void>;
+            },
           ) => Promise<void>;
         },
       ) {
@@ -47,11 +53,19 @@ describe("extension", () => {
     const command = registeredCommands.find(
       (command) => command.name === "pi-package-search-reload",
     );
-    const reload = vi.fn().mockResolvedValue(undefined);
+    const calls: string[] = [];
+    const waitForIdle = vi.fn().mockImplementation(async () => {
+      calls.push("waitForIdle");
+    });
+    const reload = vi.fn().mockImplementation(async () => {
+      calls.push("reload");
+    });
 
     expect(command).toBeDefined();
-    await command?.handler("", { reload });
+    await command?.handler("", { waitForIdle, reload });
+    expect(waitForIdle).toHaveBeenCalledOnce();
     expect(reload).toHaveBeenCalledOnce();
+    expect(calls).toEqual(["waitForIdle", "reload"]);
   });
 
   it("queues the reload bridge command after install", async () => {
@@ -90,6 +104,7 @@ describe("extension", () => {
 
     expect(sendUserMessage).toHaveBeenCalledWith("/pi-package-search-reload", {
       deliverAs: "followUp",
+      expandPromptTemplates: true,
     });
     expect(result?.details).toMatchObject({ reloadQueued: true });
   });
